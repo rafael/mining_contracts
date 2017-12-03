@@ -1,11 +1,10 @@
-
 pragma solidity ^0.4.11;
 
 contract MiningOperation {
   //Owner
   struct Owner {
     address addr;
-    uint ownershipFactor;
+    uint ownershipPercent;
     uint currentBalance;
   }
 
@@ -13,13 +12,18 @@ contract MiningOperation {
 
   bool withdrawLock;
 
-  function MiningOperation(address[] newOwners, uint[] ownershipFactor) public {
-    for (uint i = 0; i < newOwners.length; i++)
+  function MiningOperation(address[] newOwners, uint[] ownershipPercent) public {
+    uint operationPercent = 0;
+    withdrawLock = true;
+    for (uint i = 0; i < newOwners.length; i++) {
+      operationPercent += ownershipPercent[i];
       owners.push(
                   Owner(newOwners[i],
-                        ownershipFactor[i],
+                        ownershipPercent[i],
                         0)
                   );
+    }
+    require(operationPercent == 100);
   }
 
 
@@ -30,20 +34,33 @@ contract MiningOperation {
     uint availableFunds = contractAvailableFunds();
     for (uint i = 0; i < owners.length; i++){
       uint amountToTransfer = owners[i].currentBalance;
-      amountToTransfer += availableFunds / owners[i].ownershipFactor;
+      amountToTransfer += availableFunds / percentageDenominator(owners[i].ownershipPercent);
       owners[i].currentBalance = 0;
       owners[i].addr.transfer(amountToTransfer);
     }
     withdrawLock = true;
   }
 
-  function reportExpense(uint expenseAmount) public returns (bool){
+  function reportExpense(uint256 expenseAmount) public returns (bool){
     require(isOwner());
     if (expenseAmount > contractAvailableFunds())
       return false;
     for (uint i = 0; i < owners.length; i++){
       if (owners[i].addr == msg.sender) {
         owners[i].currentBalance += expenseAmount;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function substractExpense(uint256 expenseAmount) public returns (bool){
+    require(isOwner());
+    for (uint i = 0; i < owners.length; i++){
+      if (owners[i].addr == msg.sender) {
+        if (expenseAmount > owners[i].currentBalance)
+          return false;
+        owners[i].currentBalance -= expenseAmount;
         return true;
       }
     }
@@ -61,7 +78,7 @@ contract MiningOperation {
     require(isOwner());
     for (uint i = 0; i < owners.length; i++)
       if (owners[i].addr == msg.sender)
-        return owners[i].currentBalance + this.balance/owners[i].ownershipFactor;
+        return owners[i].currentBalance + this.balance/percentageDenominator(owners[i].ownershipPercent);
   }
 
 
@@ -79,6 +96,10 @@ contract MiningOperation {
       if (owners[i].addr == msg.sender)
         availableBalance -= owners[i].currentBalance;
     return availableBalance;
+  }
+
+  function percentageDenominator(uint ownership) internal pure returns (uint) {
+    return 100/ownership;
   }
 
   function() public payable { }
